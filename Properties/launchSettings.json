@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "PhotosImporter": {
+      "commandName": "Project",
+      "commandLineArgs": "Import -t test -p C:\\Users\\ZStrike\\Downloads\\DPRK\\"
+    }
+  }
+}
