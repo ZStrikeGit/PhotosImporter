@@ -2,15 +2,9 @@
 using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
 using System.Data.Odbc;
-using NExifTool;
-using Nito.AsyncEx.Synchronous;
-using Nito.AsyncEx;
 using System.Diagnostics;
 using System.Text;
-using System.Text.RegularExpressions;
-using Newtonsoft.Json.Linq;
 using System.Management.Automation;
-using Microsoft.PowerShell;
 using System.IO;
 using Microsoft.PowerShell.Commands;
 namespace PhotosImporter
@@ -66,16 +60,13 @@ namespace PhotosImporter
             return (prq1 || prq2);
         }
 
-        private static void FixBadFilenameAndUpdateRecord(FileInfo file, string[] videoExtensions, string table)
+        private static string FixBadFilenameAndUpdateRecord(FileInfo file, string[] videoExtensions, string table)
         {
-            char[] invalidChars = Path.GetInvalidFileNameChars();
-            //invalidChars.Append('\'');
-            string newFileName = string.Join("_", Encoding.ASCII.GetString(ASCIIEncoding.Convert(Encoding.Unicode, Encoding.ASCII, Encoding.Unicode.GetBytes(file.Name))).Split(invalidChars));
+            string newFileName = string.Join("_", Encoding.ASCII.GetString(ASCIIEncoding.Convert(Encoding.Unicode, Encoding.ASCII, Encoding.Unicode.GetBytes(file.Name))).Split(Path.GetInvalidFileNameChars()));
             string newPath = Path.Combine(file.Directory.FullName,newFileName);
-            //string newFilename = filename.Replace("'", "");//.Replace('"', '').Replace(",", "").Replace("`", "").Replace("’", "").Replace("—", "-");
-            //File.Move(table + filename, table + newFilename);
             file.MoveTo(newPath);
-            UpdateRecord(new FileInfo(newPath), videoExtensions, table);
+
+            return UpdateRecord(new FileInfo(newPath), videoExtensions, table);
             
         }
 
@@ -85,7 +76,7 @@ namespace PhotosImporter
             return bannedExtensions.Contains(extension);
         }
 
-        private static void UpdateRecord(FileInfo file, string[] videoExtensions, string table)
+        private static string UpdateRecord(FileInfo file, string[] videoExtensions, string table)
         {
             string name = Path.GetFileNameWithoutExtension(file.FullName);
             string hash = GetFileHash(file);
@@ -98,30 +89,33 @@ namespace PhotosImporter
             }
             double fileSizeMb = GetFileSizeMB(file);
 
-            using (OdbcConnection connection = new OdbcConnection("DSN=photos"))
-            {
-                connection.Open();
-                //string query = $"INSERT INTO {table} (name, hash, ext, tags, video, size) VALUES (@name, @hash, @ext, @tags, @video, @size)";
-                string query = $"INSERT INTO {table} (name, hash, ext, tags, video, size) VALUES (\"{name}\", \"{Escape(hash)}\", \"{extension.Substring(1)}\", \'{tags}\', {isVideo.ToString()}, {fileSizeMb.ToString()})";
-                //string query = $"INSERT INTO {table} (name, hash, ext, tags, video, size) VALUES (?, ?, ?, ?, ?, ?)";
-                //Console.WriteLine(query);
-                OdbcCommand command = new(query, connection);
+            //using (OdbcConnection connection = new OdbcConnection("DSN=photos"))
+            //{
+            //    connection.Open();
+            //    //string query = $"INSERT INTO {table} (name, hash, ext, tags, video, size) VALUES (@name, @hash, @ext, @tags, @video, @size)";
+            //    string query = $"INSERT INTO {table} (name, hash, ext, tags, video, size) VALUES (\"{name}\", \"{Escape(hash)}\", \"{extension.Substring(1)}\", \'{tags}\', {isVideo.ToString()}, {fileSizeMb.ToString()})";
+            //    //string query = $"INSERT INTO {table} (name, hash, ext, tags, video, size) VALUES (?, ?, ?, ?, ?, ?)";
+            //    //Console.WriteLine(query);
+            //    OdbcCommand command = new(query, connection);
 
-                //command.Parameters.AddWithValue("@name", name);
-                //command.Parameters.AddWithValue("@hash", hash);
-                //command.Parameters.AddWithValue("@ext", extension);
-                //command.Parameters.AddWithValue("@tags", tags);
-                //command.Parameters.AddWithValue("@video", isVideo);
-                //command.Parameters.AddWithValue("@size", fileSizeMb);
-                
-                Console.WriteLine(command.CommandText);
-                command.ExecuteNonQuery();
-            }
+            //    //command.Parameters.AddWithValue("@name", name);
+            //    //command.Parameters.AddWithValue("@hash", hash);
+            //    //command.Parameters.AddWithValue("@ext", extension);
+            //    //command.Parameters.AddWithValue("@tags", tags);
+            //    //command.Parameters.AddWithValue("@video", isVideo);
+            //    //command.Parameters.AddWithValue("@size", fileSizeMb);
+
+            //    Console.WriteLine(command.CommandText);
+            //    command.ExecuteNonQuery();
+            //}
+            string query = $"INSERT INTO {table} (name, hash, ext, tags, video, size) VALUES (\"{name}\", \"{Escape(hash)}\", \"{extension.Substring(1)}\", \'{tags}\', {isVideo.ToString()}, {fileSizeMb.ToString()});";
+            return query;
         }
 
         private static string GetFileHash(FileInfo file)
         {
             string res = "";
+
             using (var md5 = System.Security.Cryptography.MD5.Create())
             {
                 if (file.Length < (500 * 1024 * 1024))
@@ -138,11 +132,7 @@ namespace PhotosImporter
                     dynamic results = ps.Invoke();
                     foreach (var item in results)
                     {
-                        //Type t = item.GetType();
-                        //if (t is FileHashInfo)
-                        //{
-                        res = item.Hash.ToString().ToLowerInvariant();
-                            
+                        res = item.Hash.ToString().ToLowerInvariant();                            
                     }
                 }
                 return res;
@@ -188,7 +178,6 @@ namespace PhotosImporter
 
         private static double GetFileSizeMB(FileInfo file)
         {
-
             return (double)file.Length / (1024 * 1024);
         }
 
@@ -249,11 +238,13 @@ namespace PhotosImporter
 
         public override int Run(string[] remainingArguments)
         {
-            string sqlFilePath = Path.Combine(System.Reflection.Assembly.GetExecutingAssembly().Location, "output.sql");
-            System.IO.FileStream sqlFile = File.OpenWrite(sqlFilePath); // base class not allowed???
+            string sqlFilePath = Path.Combine(System.AppContext.BaseDirectory, "output.sql");
+            StreamWriter sqlFile = File.CreateText(sqlFilePath); // base class not allowed??? // null;
+            sqlFile.AutoFlush = true;
+            sqlFile.WriteLine($"DELETE FROM {PhotosTable}");
+            sqlFile.WriteLine($"ALTER TABLE {PhotosTable} AUTO_INCREMENT = 1;");
 
-            
-                string bannedExtensionsPath = "C:/Deps/bannedExtensions.json";
+            string bannedExtensionsPath = "C:/Deps/bannedExtensions.json";
                 string videoExtensionsPath = "C:/Deps/videoExtensions.json";
 
                 string[] bannedExtensions = GetBannedExtensions(bannedExtensionsPath);
@@ -265,30 +256,26 @@ namespace PhotosImporter
 
                 DeleteRecords(PhotosTable);
                 ReIndexRecords(PhotosTable);
-                foreach (string filename in Directory.GetFiles(PhotosPath))
-                {
-                    FileInfo file = new(filename);
-                if (!file.Name.StartsWith('.'))
+            foreach (string filename in Directory.GetFiles(PhotosPath))
+            {
+                FileInfo file = new(filename);
+                if (!file.Name.StartsWith('.') && !IsBannedExtension(file.Name, bannedExtensions))
                 {
                     Console.WriteLine($"{file.Name}");
                     //Path.GetFileName(filename);
-
-                    if (IsBadFilename(file.Name) && !IsBannedExtension(file.Name, bannedExtensions))
-                    {
-                        badFileNotifications.Add($"Bad Filename: {file}");
-                        Console.WriteLine($"Bad Filename: {file.Name}");
-                        FixBadFilenameAndUpdateRecord(file, videoExtensions, PhotosTable);
+                        if (IsBadFilename(file.Name))
+                        {
+                            badFileNotifications.Add($"Bad Filename: {file}");
+                            Console.WriteLine($"Bad Filename: {file.Name}");
+                            sqlFile.WriteLine(FixBadFilenameAndUpdateRecord(file, videoExtensions, PhotosTable));
+                        } else {;  
+                            sqlFile.WriteLine(UpdateRecord(file, videoExtensions, PhotosTable));
+                        }
+                        Console.WriteLine("Processed: " + file.Name);
                     }
-
-                    if (!IsBannedExtension(file.Name, bannedExtensions))
-                    {
-                        UpdateRecord(file, videoExtensions, PhotosTable);
-                    }
-                    Console.WriteLine("Processed: " + file.Name);
                 }
+               
 
-                WriteBadFileNotifications(badFileNotifications);
-                }
             foreach (var item in badFileNotifications)
             {
                 Console.WriteLine($"{item}");
