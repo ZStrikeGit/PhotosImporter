@@ -30,6 +30,7 @@ namespace PhotosImporter
 
         public string PhotosPath { get; set; }
         public string PhotosTable { get; set; }
+        public bool LiveUpdate { get; set; }
 
         private static bool HasNonASCIIChars(string str)
         {
@@ -230,6 +231,7 @@ namespace PhotosImporter
             // Required options/flags, append '=' to obtain the required value.
             HasRequiredOption("p|path=", "Path", p => PhotosPath = p);
             HasRequiredOption("t|table=", "Table", t => PhotosTable = t);
+            HasOption("l|live=", "Live Update", l => LiveUpdate = false);
 
             // Optional options/flags, append ':' to obtain an optional value, or null if not specified.
             //HasOption("s|strip:", "Strips ',' from the file before writing to output.",
@@ -241,7 +243,7 @@ namespace PhotosImporter
             string sqlFilePath = Path.Combine(System.AppContext.BaseDirectory, "output.sql");
             StreamWriter sqlFile = File.CreateText(sqlFilePath); // base class not allowed??? // null;
             sqlFile.AutoFlush = true;
-            sqlFile.WriteLine($"DELETE FROM {PhotosTable}");
+            sqlFile.WriteLine($"DELETE FROM {PhotosTable};");
             sqlFile.WriteLine($"ALTER TABLE {PhotosTable} AUTO_INCREMENT = 1;");
 
             string bannedExtensionsPath = "C:/Deps/bannedExtensions.json";
@@ -252,10 +254,11 @@ namespace PhotosImporter
 
                 List<string> badFileNotifications = new List<string>();
                 Console.WriteLine("Deleting and re-indexing in 10 seconds...");
-               // System.Threading.Thread.Sleep(10000);
-
-                DeleteRecords(PhotosTable);
-                ReIndexRecords(PhotosTable);
+            // System.Threading.Thread.Sleep(10000);
+                if (LiveUpdate) {
+                    DeleteRecords(PhotosTable);
+                    ReIndexRecords(PhotosTable);
+                }
             foreach (string filename in Directory.GetFiles(PhotosPath))
             {
                 FileInfo file = new(filename);

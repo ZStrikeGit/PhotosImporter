@@ -2,7 +2,8 @@
   "profiles": {
     "PhotosImporter": {
       "commandName": "Project",
-      "commandLineArgs": "Import -t test -p C:\\Users\\ZStrike\\Downloads\\DPRK\\"
+      "commandLineArgs": "-t badq -p F:\\ant\\Pictures",
+      "workingDirectory": "C:\\Users\\ZStrike\\Desktop"
     }
   }
 }
